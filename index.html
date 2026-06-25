@@ -421,7 +421,7 @@ async function submitOrder(){
   try{
     const resp = await fetch(ENDPOINT, {
       method:'POST',
-      headers:{ 'Content-Type':'application/json' },
+      headers:{ 'Content-Type':'text/plain' },   // ← 只改這行：避免觸發預檢
       body: JSON.stringify(order)
     });
     if (!resp.ok) throw new Error('HTTP ' + resp.status);
