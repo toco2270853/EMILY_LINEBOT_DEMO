@@ -1,0 +1,488 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>訂購單</title>
+<!-- LIFF SDK：部署到你的網址後會正常載入；在一般瀏覽器/預覽下載不到時，下方程式會自動降級 -->
+<script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+<style>
+  :root{
+    --ink:#0A3B40;
+    --sea:#0E8F8F;
+    --sea-deep:#0B6E6E;
+    --paper:#F6F8F5;
+    --surface:#FFFFFF;
+    --mist:#EDF3F1;
+    --line:#D7E1DE;
+    --muted:#5E7572;
+    --coral:#DD5847;
+    --shadow:0 1px 2px rgba(10,59,64,.05), 0 10px 28px rgba(10,59,64,.07);
+    --radius:14px;
+    --mono:ui-monospace,"SF Mono","JetBrains Mono",Menlo,monospace;
+    --sans:"PingFang TC","Noto Sans TC","Microsoft JhengHei",system-ui,-apple-system,sans-serif;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    font-family:var(--sans);
+    color:var(--ink);
+    background:var(--paper);
+    -webkit-font-smoothing:antialiased;
+    line-height:1.5;
+  }
+  .app{
+    display:flex;
+    flex-direction:column;
+    min-height:100dvh;
+    max-width:480px;
+    margin:0 auto;
+  }
+
+  /* ---- top bar ---- */
+  .topbar{
+    position:sticky; top:0; z-index:5;
+    display:flex; align-items:center; gap:12px;
+    padding:14px 18px calc(14px + env(safe-area-inset-top));
+    padding-top:max(14px, env(safe-area-inset-top));
+    background:var(--ink);
+    color:#EAF4F2;
+  }
+  .mark{flex:0 0 auto; width:30px; height:30px; opacity:.95;}
+  .brand h1{margin:0; font-size:17px; font-weight:700; letter-spacing:.3px;}
+  .brand p{margin:1px 0 0; font-size:11.5px; color:#9DC2BE; letter-spacing:.4px;}
+  .who{
+    margin-left:auto; text-align:right;
+    font-size:11px; line-height:1.35; color:#BFD9D5;
+    max-width:42%;
+  }
+  .who b{color:#FFFFFF; font-weight:600;}
+
+  /* ---- scrollable sheet ---- */
+  .sheet{flex:1 1 auto; padding:18px 16px 24px;}
+  .block{
+    background:var(--surface);
+    border:1px solid var(--line);
+    border-radius:var(--radius);
+    box-shadow:var(--shadow);
+    padding:16px 16px 18px;
+    margin-bottom:16px;
+  }
+  .block-head{display:flex; align-items:baseline; justify-content:space-between; margin-bottom:6px;}
+  .eyebrow{
+    margin:0 0 12px; font-size:11px; font-weight:700;
+    letter-spacing:1.5px; color:var(--sea-deep); text-transform:none;
+  }
+  .block-head .eyebrow{margin-bottom:0;}
+  .count{font-family:var(--mono); font-size:12px; color:var(--muted); font-variant-numeric:tabular-nums;}
+
+  .field{margin-bottom:14px;}
+  .field:last-child{margin-bottom:0;}
+  .field label{display:block; font-size:12.5px; font-weight:600; color:var(--muted); margin-bottom:6px;}
+  .field input, .field select{
+    width:100%; font-family:var(--sans); font-size:16px; color:var(--ink);
+    background:var(--mist); border:1.5px solid transparent; border-radius:10px;
+    padding:12px 12px; appearance:none; -webkit-appearance:none;
+    transition:border-color .15s ease, background .15s ease;
+  }
+  .field input[type=date]{font-family:var(--mono); letter-spacing:.5px;}
+  .field input:focus, .field select:focus{
+    outline:none; background:var(--surface);
+    border-color:var(--sea); box-shadow:0 0 0 3px rgba(14,143,143,.14);
+  }
+  .field select{
+    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 16 16'%3E%3Cpath fill='%235E7572' d='M4 6l4 4 4-4'/%3E%3C/svg%3E");
+    background-repeat:no-repeat; background-position:right 12px center; padding-right:34px;
+  }
+
+  /* ---- item rows ---- */
+  .row{
+    border:1px solid var(--line); border-radius:12px;
+    padding:13px 13px 14px; margin-bottom:10px; background:#FCFDFC;
+    animation:rise .22s ease both;
+  }
+  @keyframes rise{from{opacity:0; transform:translateY(6px);} to{opacity:1; transform:none;}}
+  .row-top{display:flex; gap:10px; align-items:flex-end;}
+  .row-top .field{flex:1; margin-bottom:0;}
+  .remove{
+    flex:0 0 auto; width:38px; height:46px; border:none; border-radius:10px;
+    background:#FBEEEC; color:var(--coral); font-size:16px; cursor:pointer;
+    display:grid; place-items:center; transition:background .15s ease;
+  }
+  .remove:active{background:#F6DBD7;}
+  .qty-field{margin-top:12px;}
+  .qty-field > label{display:block; font-size:12.5px; font-weight:600; color:var(--muted); margin-bottom:6px;}
+  .stepper{display:inline-flex; align-items:center; border:1.5px solid var(--line); border-radius:10px; overflow:hidden; background:var(--surface);}
+  .stepper button{
+    width:46px; height:46px; border:none; background:var(--mist); color:var(--ink);
+    font-size:22px; line-height:1; cursor:pointer; transition:background .12s ease;
+  }
+  .stepper button:active{background:#DDE9E6;}
+  .stepper input{
+    width:64px; height:46px; border:none; text-align:center; background:var(--surface);
+    font-family:var(--mono); font-size:17px; font-variant-numeric:tabular-nums; color:var(--ink);
+  }
+  .stepper input:focus{outline:none;}
+  .stepper input::-webkit-outer-spin-button,.stepper input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0;}
+
+  .add{
+    width:100%; margin-top:4px; padding:13px; border:1.5px dashed var(--sea);
+    border-radius:11px; background:transparent; color:var(--sea-deep);
+    font-family:var(--sans); font-size:14.5px; font-weight:600; cursor:pointer;
+    transition:background .15s ease;
+  }
+  .add:active{background:rgba(14,143,143,.07);}
+
+  .hint{font-size:12px; color:var(--muted); margin:10px 2px 0;}
+
+  /* ---- sticky action bar ---- */
+  .actionbar{
+    position:sticky; bottom:0; z-index:5;
+    display:flex; align-items:center; gap:14px;
+    padding:12px 16px calc(12px + env(safe-area-inset-bottom));
+    padding-bottom:max(12px, env(safe-area-inset-bottom));
+    background:rgba(246,248,245,.92); backdrop-filter:blur(8px);
+    border-top:1px solid var(--line);
+  }
+  .summary{font-size:13px; color:var(--muted);}
+  .summary b{font-family:var(--mono); font-size:16px; color:var(--ink); font-variant-numeric:tabular-nums;}
+  .submit{
+    margin-left:auto; padding:13px 26px; border:none; border-radius:11px;
+    background:var(--sea); color:#fff; font-family:var(--sans); font-size:15px; font-weight:700;
+    letter-spacing:.5px; cursor:pointer; transition:background .15s ease, transform .06s ease;
+    box-shadow:0 6px 16px rgba(14,143,143,.28);
+  }
+  .submit:active{background:var(--sea-deep); transform:translateY(1px);}
+  .submit:disabled{background:#A9C4C1; box-shadow:none; cursor:default;}
+
+  .err{
+    margin:0 2px 14px; padding:11px 13px; border-radius:10px;
+    background:#FBEEEC; color:#A33729; font-size:13px; border:1px solid #F2D5CF;
+  }
+  .err[hidden]{display:none;}
+
+  /* ---- success overlay ---- */
+  .done{
+    position:fixed; inset:0; z-index:20; display:grid; place-items:center;
+    background:rgba(10,59,64,.45); backdrop-filter:blur(3px); padding:24px;
+  }
+  .done[hidden]{display:none;}
+  .done-card{
+    width:100%; max-width:380px; background:var(--surface); border-radius:18px;
+    padding:26px 22px 22px; text-align:center; box-shadow:0 20px 60px rgba(10,59,64,.3);
+    animation:rise .25s ease both;
+  }
+  .done-tick{width:54px; height:54px; margin:0 auto 14px; display:block;}
+  .done-card h2{margin:0 0 4px; font-size:19px; color:var(--ink);}
+  .done-card .sub{margin:0 0 16px; font-size:13px; color:var(--muted);}
+  .recap{text-align:left; background:var(--mist); border-radius:12px; padding:12px 14px; margin-bottom:18px;}
+  .recap .ln{display:flex; justify-content:space-between; font-size:13.5px; padding:3px 0;}
+  .recap .ln span:last-child{font-family:var(--mono); font-variant-numeric:tabular-nums; color:var(--ink);}
+  .recap .ln.muted span{color:var(--muted); font-size:12px;}
+  .again{
+    width:100%; padding:13px; border:none; border-radius:11px; background:var(--ink);
+    color:#fff; font-family:var(--sans); font-size:14.5px; font-weight:600; cursor:pointer;
+  }
+
+  @media (prefers-reduced-motion: reduce){
+    *{animation:none !important; transition:none !important;}
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="topbar">
+    <svg class="mark" viewBox="0 0 32 32" fill="none" aria-hidden="true">
+      <path d="M2 20c3 0 3-4 6-4s3 4 6 4 3-4 6-4 3 4 6 4" stroke="#7FE0DA" stroke-width="2.2" stroke-linecap="round"/>
+      <path d="M2 13c3 0 3-4 6-4s3 4 6 4 3-4 6-4 3 4 6 4" stroke="#4FB8B2" stroke-width="2.2" stroke-linecap="round"/>
+    </svg>
+    <div class="brand">
+      <h1>訂購單</h1>
+      <p>海鮮水產 · 線上下單</p>
+    </div>
+    <div class="who" id="who">識別中…</div>
+  </header>
+
+  <main class="sheet">
+    <div class="err" id="err" hidden></div>
+
+    <section class="block">
+      <p class="eyebrow">訂購資訊</p>
+      <div class="field">
+        <label for="companyName">公司名稱</label>
+        <input id="companyName" type="text" placeholder="例：大洋食品" autocomplete="organization">
+      </div>
+      <div class="field">
+        <label for="customerCode">公司品號 / 客戶代號</label>
+        <input id="customerCode" type="text" placeholder="例：C-1024">
+      </div>
+      <div class="field">
+        <label for="orderDate">訂購日期</label>
+        <input id="orderDate" type="date">
+      </div>
+    </section>
+
+    <section class="block">
+      <div class="block-head">
+        <p class="eyebrow">訂購品項</p>
+        <span class="count" id="count">共 0 項</span>
+      </div>
+      <div id="items"></div>
+      <button class="add" id="addBtn" type="button">＋ 新增品項</button>
+      <p class="hint">品號從清單選取，品名自動帶入，數量用 −／＋ 調整——欄位固定，後端收到即結構化資料。</p>
+    </section>
+  </main>
+
+  <footer class="actionbar">
+    <div class="summary"><b id="footCount">0</b> 項品項</div>
+    <button class="submit" id="submitBtn" type="button">送出訂單</button>
+  </footer>
+
+  <div class="done" id="done" hidden>
+    <div class="done-card">
+      <svg class="done-tick" viewBox="0 0 56 56" fill="none" aria-hidden="true">
+        <circle cx="28" cy="28" r="26" fill="#E7F4F2"/>
+        <path d="M17 29l7 7 15-16" stroke="#0E8F8F" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      <h2>訂單已送出</h2>
+      <p class="sub" id="doneSub">我們已收到你的訂購資料</p>
+      <div class="recap" id="recap"></div>
+      <button class="again" id="againBtn" type="button">再下一筆</button>
+    </div>
+  </div>
+</div>
+
+<!-- 單列品項範本 -->
+<template id="rowTpl">
+  <div class="row">
+    <div class="row-top">
+      <div class="field">
+        <label>品號</label>
+        <select class="code">
+          <option value="" data-name="">請選擇品號…</option>
+        </select>
+      </div>
+      <button class="remove" type="button" aria-label="移除此項">✕</button>
+    </div>
+    <div class="qty-field">
+      <label>數量</label>
+      <div class="stepper">
+        <button class="minus" type="button" aria-label="減少">−</button>
+        <input class="qty" type="number" inputmode="numeric" value="1" min="1" aria-label="數量">
+        <button class="plus" type="button" aria-label="增加">＋</button>
+      </div>
+    </div>
+  </div>
+</template>
+
+<script>
+/* =========================================================
+   1) 設定區 —— 上線前改這兩個就好
+   ========================================================= */
+const LIFF_ID  = '2010509185-D3paW5WF';                 // ← LINE Developers 後台拿到的 LIFF ID
+const ENDPOINT = 'localhost:8080/'; // ← 訂單 JSON 會 POST 到這
+
+/* 商品主檔：實務上建議改成從你的後端撈
+   例如： const PRODUCTS = await fetch('/api/products').then(r => r.json()); */
+const PRODUCTS = [
+  { code: 'A001', name: '金槍魚' },
+  { code: 'A002', name: '黑鮪魚' },
+  { code: 'A003', name: '花枝'   },
+  { code: 'A004', name: '鮭魚'   },
+  { code: 'A005', name: '白蝦'   },
+  { code: 'A006', name: '透抽'   },
+];
+
+/* =========================================================
+   2) 狀態
+   ========================================================= */
+let userId = null;
+let displayName = null;
+let inClient = false;
+
+/* =========================================================
+   3) LIFF 初始化（含降級：在一般瀏覽器/預覽也能正常顯示）
+   ========================================================= */
+async function initLiff(){
+  const who = document.getElementById('who');
+  if (typeof liff === 'undefined'){
+    who.innerHTML = '瀏覽器預覽模式';
+    return; // SDK 沒載到（例如非 LINE 環境）→ 直接用表單，userId 留空
+  }
+  try{
+    await liff.init({ liffId: LIFF_ID });
+    inClient = liff.isInClient();
+    if (!liff.isLoggedIn() && !inClient){
+      who.innerHTML = '需登入 LINE';
+      // 在外部瀏覽器想取得身分可開啟登入；若只想匿名填寫可移除這行
+      // liff.login();
+      return;
+    }
+    const p = await liff.getProfile();
+    userId = p.userId;
+    displayName = p.displayName;
+    who.innerHTML = '以 <b>' + escapeHtml(displayName) + '</b> 身分下單';
+  }catch(e){
+    console.warn('LIFF 初始化失敗，改用瀏覽器模式：', e);
+    who.innerHTML = '瀏覽器預覽模式';
+  }
+}
+
+/* =========================================================
+   4) 品項列
+   ========================================================= */
+const itemsEl = document.getElementById('items');
+const tpl = document.getElementById('rowTpl');
+
+function buildCodeOptions(select){
+  PRODUCTS.forEach(p => {
+    const opt = document.createElement('option');
+    opt.value = p.code;
+    opt.dataset.name = p.name;
+    opt.textContent = p.code + ' — ' + p.name;
+    select.appendChild(opt);
+  });
+}
+
+function addRow(){
+  const node = tpl.content.firstElementChild.cloneNode(true);
+  buildCodeOptions(node.querySelector('.code'));
+
+  node.querySelector('.remove').addEventListener('click', () => {
+    node.remove();
+    refreshCount();
+  });
+  const qty = node.querySelector('.qty');
+  node.querySelector('.minus').addEventListener('click', () => {
+    qty.value = Math.max(1, (parseInt(qty.value,10) || 1) - 1);
+  });
+  node.querySelector('.plus').addEventListener('click', () => {
+    qty.value = (parseInt(qty.value,10) || 0) + 1;
+  });
+  qty.addEventListener('input', () => {
+    if (qty.value !== '' && parseInt(qty.value,10) < 1) qty.value = 1;
+  });
+
+  itemsEl.appendChild(node);
+  refreshCount();
+}
+
+function refreshCount(){
+  const n = itemsEl.querySelectorAll('.row').length;
+  document.getElementById('count').textContent = '共 ' + n + ' 項';
+  document.getElementById('footCount').textContent = n;
+}
+
+/* =========================================================
+   5) 收集 + 驗證 + 送出
+   ========================================================= */
+function collectOrder(){
+  const items = [];
+  itemsEl.querySelectorAll('.row').forEach(row => {
+    const sel = row.querySelector('.code');
+    const code = sel.value;
+    const name = sel.selectedOptions[0] ? sel.selectedOptions[0].dataset.name : '';
+    const qty = parseInt(row.querySelector('.qty').value, 10) || 0;
+    if (code && qty > 0) items.push({ code, name, qty });
+  });
+
+  return {
+    userId,
+    displayName,
+    companyName: document.getElementById('companyName').value.trim(),
+    customerCode: document.getElementById('customerCode').value.trim(),
+    date: document.getElementById('orderDate').value,
+    items,
+    submittedAt: new Date().toISOString()
+  };
+}
+
+function showError(msg){
+  const e = document.getElementById('err');
+  e.textContent = msg;
+  e.hidden = false;
+  e.scrollIntoView({ behavior:'smooth', block:'center' });
+}
+
+async function submitOrder(){
+  document.getElementById('err').hidden = true;
+  const order = collectOrder();
+
+  if (!order.companyName){ showError('請填寫公司名稱。'); return; }
+  if (!order.date){ showError('請選擇訂購日期。'); return; }
+  if (order.items.length === 0){ showError('請至少新增一筆品項，並選好品號與數量。'); return; }
+
+  // 這就是送到後端的結構化資料 —— 打開 DevTools Console 可以看到
+  console.log('送出的訂單 JSON：', JSON.stringify(order, null, 2));
+
+  const btn = document.getElementById('submitBtn');
+  btn.disabled = true; btn.textContent = '送出中…';
+
+  try{
+    const resp = await fetch(ENDPOINT, {
+      method:'POST',
+      headers:{ 'Content-Type':'application/json' },
+      body: JSON.stringify(order)
+    });
+    if (!resp.ok) throw new Error('HTTP ' + resp.status);
+    showDone(order);
+  }catch(err){
+    console.error(err);
+    showError('送出失敗，請檢查網路後再試一次。（' + err.message + '）');
+    btn.disabled = false; btn.textContent = '送出訂單';
+  }
+}
+
+/* =========================================================
+   6) 完成畫面
+   ========================================================= */
+function showDone(order){
+  const recap = document.getElementById('recap');
+  recap.innerHTML = '';
+  order.items.forEach(it => {
+    const ln = document.createElement('div');
+    ln.className = 'ln';
+    ln.innerHTML = '<span>' + escapeHtml(it.name || it.code) + '</span><span>× ' + it.qty + '</span>';
+    recap.appendChild(ln);
+  });
+  const foot = document.createElement('div');
+  foot.className = 'ln muted';
+  foot.innerHTML = '<span>' + escapeHtml(order.companyName) + '</span><span>' + order.date + '</span>';
+  recap.appendChild(foot);
+
+  document.getElementById('done').hidden = false;
+
+  // LINE 內可選擇送出後自動關閉視窗：
+  // if (inClient) setTimeout(() => liff.closeWindow(), 1800);
+}
+
+function resetForm(){
+  document.getElementById('done').hidden = true;
+  document.getElementById('companyName').value = '';
+  document.getElementById('customerCode').value = '';
+  itemsEl.innerHTML = '';
+  addRow();
+  const btn = document.getElementById('submitBtn');
+  btn.disabled = false; btn.textContent = '送出訂單';
+  window.scrollTo({ top:0, behavior:'smooth' });
+}
+
+/* =========================================================
+   7) 工具 + 啟動
+   ========================================================= */
+function escapeHtml(s){
+  return String(s == null ? '' : s).replace(/[&<>"']/g, c => (
+    { '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]
+  ));
+}
+
+document.getElementById('orderDate').value = new Date().toISOString().slice(0,10);
+document.getElementById('addBtn').addEventListener('click', addRow);
+document.getElementById('submitBtn').addEventListener('click', submitOrder);
+document.getElementById('againBtn').addEventListener('click', resetForm);
+
+addRow();        // 預設先給一列
+initLiff();      // 嘗試抓 LINE 身分
+</script>
+</body>
+</html>
