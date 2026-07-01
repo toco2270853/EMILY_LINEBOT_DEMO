@@ -280,7 +280,7 @@
    1) 設定區 —— 上線前改這兩個就好
    ========================================================= */
 const LIFF_ID  = '2010509185-D3paW5WF';                 // ← LINE Developers 後台拿到的 LIFF ID
-const ENDPOINT = '/api/order';   // ← 改成打自己的中繼，不再直接打 ngrok
+const ENDPOINT = 'https://polymerous-domenic-dovish.ngrok-free.dev/';   // ← 直接打你的 ngrok server
 
 /* 商品主檔：實務上建議改成從你的後端撈
    例如： const PRODUCTS = await fetch('/api/products').then(r => r.json()); */
@@ -419,13 +419,14 @@ async function submitOrder(){
   btn.disabled = true; btn.textContent = '送出中…';
 
   try{
-    const resp = await fetch(ENDPOINT, {
+    await fetch(ENDPOINT, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },  // ← 改回 json
+      mode: 'no-cors',                          // ← 不讀回應，繞過 CORS 讀取檢查
+      headers: { 'Content-Type': 'text/plain' }, // ← 簡單請求，不觸發預檢 OPTIONS
       body: JSON.stringify(order)
     });
-    if (!resp.ok) throw new Error('HTTP ' + resp.status);
-showDone(order);
+    // no-cors 拿不到回應（opaque），只要送出沒拋錯就當成功
+    showDone(order);
   }catch(err){
     console.error(err);
     showError('送出失敗，請檢查網路後再試一次。（' + err.message + '）');
